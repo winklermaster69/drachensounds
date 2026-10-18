@@ -156,7 +156,9 @@ local function SpellRow(container, i)
 	row.label:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
 	row.label:SetWidth(150)
 	row.label:SetWordWrap(false)
-	row.trigger = Dropdown(row, 140, function() return { "cast", "ready" } end,
+	row.trigger = Dropdown(row, 140, function()
+			return ns.EVENT_BY_KEY.cooldownReady and { "cast", "ready" } or { "cast" }
+		end,
 		function() return row.entry and row.entry.trigger end,
 		function(v)
 			row.entry.trigger = v
@@ -329,7 +331,11 @@ local function BuildPanel()
 		"bereit“, „Beim Wirken“ einen eigenen Sound. Namen werden nur für erlernte Zauber erkannt.", spellHeader)
 	local input = EditBox(c, 240, function(text)
 		if text == "" then return end
-		tinsert(ns.db.spells, { spell = text, trigger = "ready", enabled = true })
+		if ns.EVENT_BY_KEY.cooldownReady then
+			tinsert(ns.db.spells, { spell = text, trigger = "ready", enabled = true })
+		else
+			tinsert(ns.db.spells, { spell = text, trigger = "cast", sound = ns.SOUNDS[1], enabled = true })
+		end
 		Changed()
 		f:RefreshLists()
 	end)

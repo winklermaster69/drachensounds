@@ -6,14 +6,15 @@ WoW addon that plays custom mp3s on game events, for Midnight retail (12.1.5, In
 
 - Forever ("Camelot" internally, `WOW_PROJECT_ID == WOW_PROJECT_CAMELOT` = 18 → `ns.IS_FOREVER`) is Classic content on the Midnight engine. One TOC lists both interfaces (`## Interface: 120105, 16001`); no per-flavor TOC or code fork.
 - Verified against wow-ui-source branch `forever` (1.60.1.70450): every documented API and event the addon uses, their secret-value flags and the secret predicates are identical to `live`. The UI templates resolve to the same Mainline variants (Forever adds a Camelot overlay). Re-run that diff when adding APIs: compare `Blizzard_APIDocumentationGenerated` entries between the `live` and `forever` branches.
-- Content differences are handled at runtime, not by flavor checks: tank detection falls back from spec role to `UnitGroupRolesAssigned` (Forever may have no specializations). Bloodlust IDs that don't exist on a client simply never fire.
+- **Client-specific triggers:** declare them, don't branch on them. A trigger in `ns.ALL_EVENTS` (Core.lua) gets `clients = { "midnight" }` or `{ "forever" }` (omit = both). `SelectEvents` filters at load into `ns.EVENTS` / `ns.EVENT_BY_KEY` (`ns.CLIENT` is "midnight"/"forever"); settings defaults, the panel and `ns:Fire` only ever see that filtered list, so an unavailable trigger has no settings row, no UI and stays silent. Its detection goes in `Triggers.lua` as `Detector("<key>", function() On(...) end)`; `InitTriggers` only installs detectors of available triggers. `On()` allows any number of handlers per WoW event (optional unit filter per handler), so detectors never share dispatch code. Per-trigger extra settings go in the trigger's `defaults` table. Adding a trigger = entry in `ALL_EVENTS` + `Detector` + (if needed) a sub-row in `EventRow` (Options.lua). A new trigger also needs a scenario in `tests/smoke.lua`, run with both flavors.
+- Remaining content differences are handled at runtime, not by flavor checks: tank detection falls back from spec role to `UnitGroupRolesAssigned` (Forever may have no specializations). Bloodlust IDs that don't exist on a client simply never fire.
 - Clients: `_retail_` (Midnight), `_classic_beta_` (Forever beta), `_forever_` (Forever live) under `C:\Program Files (x86)\World of Warcraft`. `deploy.ps1` mirrors into every installed one (`-Clients` to pick). Smoke test both flavors: `DS_FLAVOR=forever` simulates Forever.
 
 ## Layout
 
 - `Drachensounds/` — the addon folder that gets deployed (TOC lists load order).
-  - `Core.lua` — namespace, `ns.EVENTS` (the fixed event list: keys, German labels/tooltips, the hardcoded sound `files` per event, default throttles — the single source of truth for those), SavedVariables defaults/merge/migration, sound playback, slash command.
-  - `Triggers.lua` — all event detection, spell tracking, Bloodlust aura-sound registration.
+  - `Core.lua` — namespace, `ns.ALL_EVENTS` (the fixed trigger catalogue, filtered per client into `ns.EVENTS`: keys, German labels/tooltips, the hardcoded sound `files` per event, default throttles — the single source of truth for those), SavedVariables defaults/merge/migration, sound playback, slash command.
+  - `Triggers.lua` — event dispatch (`On`), one `Detector` per trigger key, spell tracking, Bloodlust aura-sound registration.
   - `Options.lua` — the config panel (plain frames, no libraries) + stub entry in Esc > Options > AddOns.
   - `Sounds.lua` — **generated** list of bundled sounds. Never edit by hand.
   - `sounds/*.mp3` — the bundled subset of the library, renamed after their event (origins below).

@@ -6,16 +6,37 @@ local ADDON_NAME, ns = ...
 local issecretvalue = issecretvalue or function() return false end
 
 local frame = CreateFrame("Frame")
-local handlers = {}
-frame:SetScript("OnEvent", function(_, event, ...) handlers[event](...) end)
+local handlers = {}     -- event -> { fn, ... }
+local unitFilter = {}   -- event -> unit list it is registered for, false = all units
+frame:SetScript("OnEvent", function(_, event, ...)
+	for _, fn in ipairs(handlers[event]) do fn(...) end
+end)
 
+-- Adds a handler for a WoW event; any number of handlers may share one event.
+-- With units given, fn only sees events for those units (a shared event with
+-- different filters is registered for all units and filtered per handler).
 local function On(event, fn, ...)
-	handlers[event] = fn
-	if ... then
-		frame:RegisterUnitEvent(event, ...)
-	else
+	local units = ... and { ... }
+	if units then
+		local inner = fn
+		fn = function(unit, ...) if tContains(units, unit) then inner(unit, ...) end end
+	end
+	if not handlers[event] then
+		handlers[event] = {}
+		unitFilter[event] = units or false
+		if units then frame:RegisterUnitEvent(event, unpack(units)) else frame:RegisterEvent(event) end
+	elseif unitFilter[event] and not (units and table.concat(units, ",") == table.concat(unitFilter[event], ",")) then
+		unitFilter[event] = false
 		frame:RegisterEvent(event)
 	end
+	tinsert(handlers[event], fn)
+end
+
+-- Detection for each trigger, keyed like ns.EVENTS. InitTriggers only installs the
+-- detectors of triggers available on the running client.
+local detectors = {}
+local function Detector(key, setup)
+	detectors[key] = setup
 end
 
 -- Returns true/false, or nil when the answer is hidden.
@@ -52,13 +73,19 @@ end
 -- Player death / resurrection / boss kill
 ---------------------------------------------------------------------------
 
-local function SetupSimpleEvents()
+Detector("playerDeath", function()
 	On("PLAYER_DEAD", function() ns:Fire("playerDeath") end)
+end)
+
+Detector("resurrect", function()
 	On("RESURRECT_REQUEST", function() ns:Fire("resurrect") end)
+end)
+
+Detector("bossKill", function()
 	On("ENCOUNTER_END", function(_, _, _, _, success)
 		if not issecretvalue(success) and success == 1 then ns:Fire("bossKill") end
 	end)
-end
+end)
 
 ---------------------------------------------------------------------------
 -- Group member and pet deaths
@@ -117,21 +144,22 @@ local function CheckPet()
 	if dead then PetDied() else petDead = false end
 end
 
-local function OnUnitChanged(unit)
-	if groupUnits[unit] then
-		CheckGroupUnit(unit)
-	elseif unit == "pet" then
-		CheckPet()
+Detector("groupDeath", function()
+	local function OnUnitChanged(unit)
+		if groupUnits[unit] then CheckGroupUnit(unit) end
 	end
-end
-
-local function SetupDeaths()
-	On("GROUP_ROSTER_UPDATE", RebuildGroup)
 	On("UNIT_HEALTH", OnUnitChanged)
 	On("UNIT_FLAGS", OnUnitChanged)
+	On("UNIT_DIED", function()
+		for unit in pairs(groupUnits) do CheckGroupUnit(unit) end
+	end)
+end)
+
+Detector("petDeath", function()
+	On("UNIT_HEALTH", CheckPet, "pet")
+	On("UNIT_FLAGS", CheckPet, "pet")
 	On("UNIT_DIED", function(guid)
 		if petGUID and not issecretvalue(guid) and guid == petGUID then PetDied() end
-		for unit in pairs(groupUnits) do CheckGroupUnit(unit) end
 		CheckPet()
 	end)
 	On("UNIT_PET", function()
@@ -142,7 +170,8 @@ local function SetupDeaths()
 			C_Timer.After(1, function() if not UnitExists("pet") then SeedPet() end end)
 		end
 	end, "player")
-end
+	On("PLAYER_ENTERING_WORLD", SeedPet)
+end)
 
 ---------------------------------------------------------------------------
 -- Boss aggro
@@ -190,13 +219,14 @@ local function OnThreatEvent(unit)
 	if unit == "player" or (unit and unit:find("^boss")) then CheckBosses() end
 end
 
-local function SetupBossAggro()
+Detector("bossAggro", function()
 	On("UNIT_THREAT_SITUATION_UPDATE", OnThreatEvent)
 	On("UNIT_THREAT_LIST_UPDATE", OnThreatEvent)
 	On("UNIT_TARGET", OnThreatEvent)
 	On("INSTANCE_ENCOUNTER_ENGAGE_UNIT", CheckBosses)
 	On("PLAYER_REGEN_ENABLED", function() wipe(bossAggro) end)
-end
+	On("PLAYER_ENTERING_WORLD", function() wipe(bossAggro) end)
+end)
 
 ---------------------------------------------------------------------------
 -- Spells: cooldown-ready list, per-spell cast / ready mappings
@@ -285,7 +315,7 @@ function ns:RebuildSpells()
 				if spellID then AddCast(castByID, spellID, m) end
 				local key = (name or strtrim(m.spell or "")):lower()
 				if key ~= "" and not tonumber(key) then AddCast(castByName, key, m) end
-			elseif spellID then
+			elseif spellID and ns.EVENT_BY_KEY.cooldownReady then
 				readyTracked[spellID] = { onCD = false }
 			end
 		end
@@ -319,12 +349,17 @@ local function OnSpellCast(_, _, spellID)
 	end
 end
 
-local function SetupSpells()
+Detector("cooldownReady", function()
 	On("SPELL_UPDATE_COOLDOWN", function() CheckCooldowns(true) end)
 	On("SPELL_UPDATE_CHARGES", function() CheckCooldowns(true) end)
+end)
+
+-- The spell list itself (cast entries) is not a fixed trigger and runs on every client.
+local function SetupSpellList()
 	On("SPELLS_CHANGED", QueueRebuild)
 	On("PLAYER_SPECIALIZATION_CHANGED", QueueRebuild, "player")
 	On("TRAIT_CONFIG_UPDATED", QueueRebuild)
+	On("UNIT_SPELLCAST_SUCCEEDED", OnSpellCast, "player")
 end
 
 ---------------------------------------------------------------------------
@@ -387,6 +422,15 @@ local function OnCastEnded(unit)
 	hiddenCasts[unit] = nil
 end
 
+Detector("magePortal", function()
+	On("UNIT_SPELLCAST_START", OnCastStart)
+	On("UNIT_SPELLCAST_SUCCEEDED", function(unit)
+		if unit ~= "player" then OnHiddenCastSucceeded(unit) end
+	end)
+	On("UNIT_SPELLCAST_INTERRUPTED", OnCastEnded)
+	On("UNIT_SPELLCAST_FAILED", OnCastEnded)
+end)
+
 ---------------------------------------------------------------------------
 -- Ready check: on start and/or once every connected member confirmed ready
 ---------------------------------------------------------------------------
@@ -417,7 +461,7 @@ local function ReadyCheckMode(mode)
 	return cfgMode == mode or cfgMode == "both"
 end
 
-local function SetupReadyCheck()
+Detector("readyCheck", function()
 	On("READY_CHECK", function()
 		readyCheckRunning = true
 		if ReadyCheckMode("start") then ns:Fire("readyCheck") end
@@ -433,7 +477,7 @@ local function SetupReadyCheck()
 		end
 	end)
 	On("READY_CHECK_FINISHED", function() readyCheckRunning = false end)
-end
+end)
 
 ---------------------------------------------------------------------------
 -- Bloodlust / Heroism
@@ -473,8 +517,9 @@ function ns:RefreshAuraSounds()
 	for _, handle in ipairs(auraHandles) do pcall(C_UnitAuras.RemoveAuraSound, handle) end
 	wipe(auraHandles)
 
-	local file = ns.EVENT_BY_KEY.bloodlust.files[1]
-	if not (self.db.enabled and self.db.events.bloodlust.enabled and self:HasSound(file)) then return end
+	local def = ns.EVENT_BY_KEY.bloodlust
+	if not (def and self.db.enabled and self.db.events.bloodlust.enabled and self:HasSound(def.files[1])) then return end
+	local file = def.files[1]
 	local trigger = Enum.UnitAuraSoundTrigger and Enum.UnitAuraSoundTrigger.Added or 0
 	for _, spellID in ipairs(LUST_DEBUFFS) do
 		local ok, handle = pcall(C_UnitAuras.AddAuraSound, trigger, {
@@ -494,14 +539,14 @@ function ns:RefreshAuraSounds()
 	self:Debug("Kampfrausch-Sounds registriert: %d", #auraHandles)
 end
 
-local function SetupBloodlust()
+Detector("bloodlust", function()
 	On("ADDON_RESTRICTION_STATE_CHANGED", function(_, state)
 		-- restriction checks always read "inactive" during this event, so retry just after it
 		if auraRefreshPending and state == Enum.AddOnRestrictionState.Inactive then
 			C_Timer.After(0.2, function() ns:RefreshAuraSounds() end)
 		end
 	end)
-end
+end)
 
 ---------------------------------------------------------------------------
 
@@ -526,29 +571,16 @@ function ns:PrintStatus()
 	self:Print("Überwachte Abklingzeiten: %d, Zauber beim Wirken: %d per ID / %d per Name",
 		Count(readyTracked), Count(castByID), Count(castByName))
 	self:Print("Überwachte Gruppenmitglieder: %d, Begleiter erkannt: %s", Count(groupUnits), JaNein(petGUID ~= nil))
+	self:Print("Auslöser in diesem Client: %d von %d", #ns.EVENTS, #ns.ALL_EVENTS)
 end
 
 function ns:InitTriggers()
-	SetupSimpleEvents()
-	SetupDeaths()
-	SetupBossAggro()
-	SetupSpells()
-	SetupBloodlust()
-	SetupReadyCheck()
-	On("UNIT_SPELLCAST_START", OnCastStart)
-	On("UNIT_SPELLCAST_SUCCEEDED", function(unit, castGUID, spellID)
-		if unit == "player" then
-			OnSpellCast(unit, castGUID, spellID)
-		else
-			OnHiddenCastSucceeded(unit)
-		end
-	end)
-	On("UNIT_SPELLCAST_INTERRUPTED", OnCastEnded)
-	On("UNIT_SPELLCAST_FAILED", OnCastEnded)
-	On("PLAYER_ENTERING_WORLD", function()
-		RebuildGroup()
-		SeedPet()
-		wipe(bossAggro)
-		ns:OnConfigChanged()
-	end)
+	-- shared state used by several detectors
+	On("GROUP_ROSTER_UPDATE", RebuildGroup)
+	On("PLAYER_ENTERING_WORLD", RebuildGroup)
+	for _, def in ipairs(ns.EVENTS) do
+		if detectors[def.key] then detectors[def.key]() end
+	end
+	SetupSpellList()
+	On("PLAYER_ENTERING_WORLD", function() ns:OnConfigChanged() end)
 end

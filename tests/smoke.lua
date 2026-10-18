@@ -89,6 +89,7 @@ _G.ButtonFrameTemplate_HideButtonBar = function() end
 _G.HideUIPanel = function() end
 _G.SlashCmdList = {}
 _G.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
+_G.tContains = function(t, v) for _, x in ipairs(t) do if x == v then return true end end return false end
 _G.tinsert, _G.tremove = table.insert, table.remove
 _G.strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 _G.print = function(...) io.write("  [chat] ", table.concat({ ... }, " "), "\n") end
@@ -227,6 +228,11 @@ for line in io.lines(ADDON .. "/" .. ADDON .. ".toc") do
 		chunk(ADDON, ns)
 	end
 end
+-- client-limited triggers (fake ones, to exercise the filter on both flavors)
+table.insert(ns.ALL_EVENTS, { key = "testMidnightOnly", files = { "portal" }, throttle = 1,
+	clients = { "midnight" }, defaults = { extra = 1 }, label = "Test Midnight", tooltip = "" })
+table.insert(ns.ALL_EVENTS, { key = "testForeverOnly", files = { "portal" }, throttle = 1,
+	clients = { "forever" }, label = "Test Forever", tooltip = "" })
 units.player = { guid = "Player-1" }
 -- a v1 (pre-release) SavedVariables table, to exercise the migration
 DrachensoundsDB = {
@@ -256,6 +262,13 @@ Check("migration: spells merged, sounds renamed", #db.spells == 3 and db.spells[
 Check("migration: event choices kept, sounds dropped", db.events.playerDeath.enabled == false
 	and db.events.playerDeath.sound == nil and db.events.groupDeath.enabled == true)
 db.events.playerDeath.enabled = true
+Check("client filter: midnight-only trigger", (ns.EVENT_BY_KEY.testMidnightOnly ~= nil) == not FOREVER)
+Check("client filter: forever-only trigger", (ns.EVENT_BY_KEY.testForeverOnly ~= nil) == FOREVER)
+Check("client filter: settings only for available triggers",
+	(db.events.testMidnightOnly ~= nil) == not FOREVER and (db.events.testForeverOnly ~= nil) == FOREVER)
+Check("per-trigger defaults merged", FOREVER or db.events.testMidnightOnly.extra == 1)
+ns:Fire("testMidnightOnly"); ns:Fire("testForeverOnly")
+Expect("only the running client's trigger plays", { "portal" })
 Check("every event sound is bundled", (function()
 	for _, def in ipairs(ns.EVENTS) do
 		for _, file in ipairs(def.files) do

@@ -3,6 +3,7 @@ local ADDON_NAME, ns = ...
 ns.SOUND_DIR = "Interface\\AddOns\\" .. ADDON_NAME .. "\\sounds\\"
 -- WoW Forever (Classic content on the Midnight engine) shares this code; see CLAUDE.md.
 ns.IS_FOREVER = WOW_PROJECT_ID == (WOW_PROJECT_CAMELOT or 18)
+ns.CLIENT = ns.IS_FOREVER and "forever" or "midnight"
 ns.CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
 ns.CHANNEL_LABELS = {
 	Master = "Meisterkanal",
@@ -12,10 +13,13 @@ ns.CHANNEL_LABELS = {
 	Dialog = "Dialog",
 }
 
--- Fixed event triggers, in display order. Each plays one of its hardcoded `files`;
--- events with several files let the user alternate or pick one (cfg.variant).
--- Detection lives in Triggers.lua.
-ns.EVENTS = {
+-- All fixed triggers, in display order. Each plays one of its hardcoded `files`;
+-- triggers with several files let the user alternate or pick one (cfg.variant).
+--   clients  = { "midnight" } / { "forever" }: only on that client (omit = everywhere)
+--   defaults = extra per-trigger settings, merged into db.events[key]
+-- Only triggers for the running client end up in ns.EVENTS (see SelectEvents);
+-- detection lives in Triggers.lua, registered per trigger key.
+ns.ALL_EVENTS = {
 	{ key = "playerDeath", files = { "spielertod" }, throttle = 2,
 	  label = "Eigener Tod",
 	  tooltip = "Wenn du stirbst." },
@@ -23,9 +27,11 @@ ns.EVENTS = {
 	  label = "Tod des Begleiters",
 	  tooltip = "Wenn dein Begleiter (Tier, Dämon, Elementar …) stirbt." },
 	{ key = "groupDeath", files = { "gruppentod" }, throttle = 2,
+	  defaults = { throttle = 2 },  -- user-adjustable minimum seconds between group death sounds
 	  label = "Tod eines Gruppenmitglieds",
 	  tooltip = "Wenn ein anderes Gruppen- oder Schlachtzugsmitglied stirbt. Totstellen wird ignoriert." },
 	{ key = "bossAggro", files = { "bossaggro" }, throttle = 3,
+	  defaults = { ignoreAsTank = false },
 	  label = "Aggro eines Bosses",
 	  tooltip = "Wenn du die Aggro eines Bosses (Bossrahmen 1–8) bekommst." },
 	{ key = "bossKill", files = { "bosssieg" }, throttle = 2,
@@ -45,23 +51,31 @@ ns.EVENTS = {
 	  tooltip = "Wenn du ein Portal wirkst, oder sobald ein Magier aus deiner Gruppe bzw. deinem Schlachtzug " ..
 		"in deiner Nähe ein Portal öffnet." },
 	{ key = "readyCheck", files = { "bereitschaftscheck" }, throttle = 2,
+	  defaults = { mode = "allReady" },  -- "start" | "allReady" | "both"
 	  label = "Bereitschaftscheck",
 	  tooltip = "Wenn ein Bereitschaftscheck startet und/oder alle bereit sind (siehe Auswahl darunter)." },
 }
-ns.EVENT_BY_KEY = {}
-for _, def in ipairs(ns.EVENTS) do ns.EVENT_BY_KEY[def.key] = def end
+-- Fills ns.EVENTS / ns.EVENT_BY_KEY with the triggers available on this client.
+local function SelectEvents()
+	ns.EVENTS, ns.EVENT_BY_KEY = {}, {}
+	for _, def in ipairs(ns.ALL_EVENTS) do
+		if not def.clients or tContains(def.clients, ns.CLIENT) then
+			tinsert(ns.EVENTS, def)
+			ns.EVENT_BY_KEY[def.key] = def
+		end
+	end
+end
 
 local DB_VERSION = 3
 
 local function BuildDefaults()
 	local events = {}
 	for _, def in ipairs(ns.EVENTS) do
-		events[def.key] = { enabled = true }
-		if #def.files > 1 then events[def.key].variant = 0 end  -- 0 = alternate, n = always files[n]
+		local cfg = { enabled = true }
+		if #def.files > 1 then cfg.variant = 0 end  -- 0 = alternate, n = always files[n]
+		for k, v in pairs(def.defaults or {}) do cfg[k] = v end
+		events[def.key] = cfg
 	end
-	events.bossAggro.ignoreAsTank = false
-	events.groupDeath.throttle = 2  -- user-adjustable minimum seconds between group death sounds
-	events.readyCheck.mode = "allReady" -- "start" | "allReady" | "both"
 	return {
 		version = DB_VERSION,
 		enabled = true,
@@ -181,10 +195,11 @@ function ns:Throttled(key, seconds)
 	return false
 end
 
--- Plays the sound of a fixed event (see ns.EVENTS).
+-- Plays the sound of a fixed event (see ns.EVENTS). Triggers not available on this
+-- client have no def and stay silent.
 function ns:Fire(key)
 	local def, cfg = ns.EVENT_BY_KEY[key], self.db.events[key]
-	if not (self.db.enabled and cfg and cfg.enabled) then return end
+	if not (def and self.db.enabled and cfg and cfg.enabled) then return end
 	if self:Throttled(key, cfg.throttle or def.throttle) then return end
 	local file = self:EventFile(key)
 	self:Debug("Ereignis: %s (%s)", def.label, file)
@@ -214,6 +229,7 @@ loader:RegisterEvent("ADDON_LOADED")
 loader:SetScript("OnEvent", function(self, _, name)
 	if name ~= ADDON_NAME then return end
 	self:UnregisterEvent("ADDON_LOADED")
+	SelectEvents()
 	DrachensoundsDB = DrachensoundsDB or {}
 	Migrate(DrachensoundsDB)
 	ApplyDefaults(DrachensoundsDB, BuildDefaults())
