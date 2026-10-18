@@ -1,7 +1,7 @@
-## Interface: 120105
+## Interface: 120105, 16001
 ## Title: Drachensounds
 ## Notes: Spielt Sounds bei Toden, Bosskämpfen, Kampfrausch, Wiederbelebungen und Zaubern ab. Einstellungen: /dsounds
-## Version: 1.0.1
+## Version: 1.1.0
 ## Category: Audio & Video
 ## IconTexture: Interface\Icons\INV_Misc_Drum_01
 ## SavedVariables: DrachensoundsDB

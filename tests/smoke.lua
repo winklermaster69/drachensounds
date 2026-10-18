@@ -1,5 +1,6 @@
 -- Offline smoke test: loads the addon against a mocked WoW API and simulates events.
 -- Usage (from repo root): lua tests/smoke.lua
+-- Set DS_FLAVOR=forever to simulate the WoW Forever client (project ID 18, no specializations).
 -- Secret values are modelled by the SECRET sentinel; doing math/comparisons on it errors,
 -- like real secrets do for tainted code.
 
@@ -23,7 +24,8 @@ local raid, subgroup = false, 0
 local restricted = {}     -- AddOnRestrictionType -> bool
 local auraSounds = {}
 local nextAuraHandle = 1
-local specRole = "DAMAGER"
+local FOREVER = os.getenv("DS_FLAVOR") == "forever"
+local specRole, groupRole = "DAMAGER", "NONE"
 
 ---------------------------------------------------------------------------
 -- Generic widget mock: unknown methods are no-ops returning another widget
@@ -91,6 +93,9 @@ _G.tinsert, _G.tremove = table.insert, table.remove
 _G.strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 _G.print = function(...) io.write("  [chat] ", table.concat({ ... }, " "), "\n") end
 _G.MAX_BOSS_FRAMES = 8
+_G.WOW_PROJECT_ID = FOREVER and 18 or 1
+_G.C_AddOns = { GetAddOnMetadata = function() return "test" end }
+_G.UnitGroupRolesAssigned = function() return groupRole end
 _G.Settings = {
 	RegisterCanvasLayoutCategory = function() return {} end,
 	RegisterAddOnCategory = function() end,
@@ -137,7 +142,7 @@ _G.GetNumGroupMembers = function() return raid and 5 or subgroup + 1 end
 _G.GetNumSubgroupMembers = function() return subgroup end
 _G.C_Secrets = { CanCompareUnitTokens = function() return true end }
 _G.C_SpecializationInfo = {
-	GetSpecialization = function() return 1 end,
+	GetSpecialization = function() return FOREVER and 0 or 1 end,
 	GetSpecializationInfo = function() return 1, "Spec", "", 0, specRole end,
 }
 _G.C_RestrictedActions = { IsAddOnRestrictionActive = function(t) return restricted[t] or false end }
@@ -344,8 +349,12 @@ units.boss1.threat, units.boss1.target = SECRET, "player"
 Fire("PLAYER_REGEN_ENABLED")
 Fire("UNIT_TARGET", "boss1");   Expect("secret threat falls back to boss target", { "bossaggro" })
 Fire("PLAYER_REGEN_ENABLED")
-db.events.bossAggro.ignoreAsTank, specRole = true, "TANK"
-Fire("UNIT_TARGET", "boss1");   Expect("tank spec muted", {})
+db.events.bossAggro.ignoreAsTank, specRole, groupRole = true, "TANK", "TANK"
+Fire("UNIT_TARGET", "boss1");   Expect("tank muted", {})
+Fire("PLAYER_REGEN_ENABLED")
+groupRole = "DAMAGER"  -- spec role wins where specs exist; Forever only has the group role
+Fire("UNIT_TARGET", "boss1");   Expect("tank detection source", FOREVER and { "bossaggro" } or {})
+specRole, groupRole = "DAMAGER", "NONE"
 units.boss1 = nil
 
 -- spell list: "ready" entries play the fixed cooldown sound, "cast" entries their own sound
@@ -453,6 +462,7 @@ SlashCmdList.DRACHENSOUNDS("")
 FlushTimers()
 local panel = _G.DrachensoundsOptionsFrame
 Check("options panel shown", panel and panel:IsShown())
+Check("client flavor detected", ns.IS_FOREVER == FOREVER)
 table.insert(db.spells, { spell = "Unknown Spell", trigger = "ready", enabled = false })
 panel:RefreshLists()
 FlushTimers()

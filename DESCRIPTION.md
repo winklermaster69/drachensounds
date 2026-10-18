@@ -2,7 +2,7 @@
 
 ## English
 
-**Meddl Loide!** The long-awaited **addon version of the Drachenlord WeakAuras package** is here. It plays sounds at key moments in World of Warcraft: Midnight, including in combat, where the old auras stay silent.
+**Meddl Loide!** The long-awaited **addon version of the Drachenlord WeakAuras package** is here. It plays sounds at key moments in World of Warcraft: Midnight and WoW Forever, including in combat, where the old auras stay silent.
 
 ### Triggers
 
@@ -39,7 +39,7 @@ Add spells by name or ID. For each one, choose whether it plays the cooldown sou
 
 ## Deutsch
 
-**Meddl Loide!** Etzala ist sie da: die lang ersehnte **Addon-Version des Drachenlord-WeakAuras-Pakets**. Sie spielt Sounds bei wichtigen Momenten in World of Warcraft: Midnight ab, auch im Kampf, wo die alten Auras stumm bleiben.
+**Meddl Loide!** Etzala ist sie da: die lang ersehnte **Addon-Version des Drachenlord-WeakAuras-Pakets**. Sie spielt Sounds bei wichtigen Momenten in World of Warcraft: Midnight und WoW Forever ab, auch im Kampf, wo die alten Auras stumm bleiben.
 
 ### Auslöser
 

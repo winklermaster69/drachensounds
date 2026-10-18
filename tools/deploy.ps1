@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Bundles sounds, regenerates Drachensounds/Sounds.lua and copies the addon into WoW.
+  Bundles sounds, regenerates Drachensounds/Sounds.lua and copies the addon into every
+  installed WoW client that runs it (Midnight retail and the Forever clients).
 
 .EXAMPLE
   .\tools\deploy.ps1                         # regenerate manifest + deploy
@@ -8,18 +9,22 @@
   .\tools\deploy.ps1 -Add aber               # same, keeping the library name
   .\tools\deploy.ps1 -Remove aber            # drop bundled sounds
   .\tools\deploy.ps1 -NoDeploy               # only update the repo
+  .\tools\deploy.ps1 -Clients _retail_       # deploy to one client only
 #>
 param(
     [string[]]$Add = @(),
     [string[]]$Remove = @(),
     [switch]$NoDeploy,
-    [string]$WowPath = "C:\Program Files (x86)\World of Warcraft\_retail_"
+    [string]$WowRoot = "C:\Program Files (x86)\World of Warcraft",
+    # Client folders under $WowRoot; missing ones are skipped
+    [string[]]$Clients = @("_retail_", "_classic_beta_", "_forever_")
 )
 $ErrorActionPreference = "Stop"
 
 # "powershell -File" passes "a,b" as one string, so split lists ourselves
 $Add    = @($Add    | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 $Remove = @($Remove | ForEach-Object { $_ -split "," } | Where-Object { $_ })
+$Clients = @($Clients | ForEach-Object { $_ -split "," } | Where-Object { $_ })
 
 $repo    = Split-Path $PSScriptRoot -Parent
 $addon   = Join-Path $repo "Drachensounds"
@@ -53,8 +58,12 @@ Write-Host "Sounds.lua: $($names.Count) sounds"
 
 if ($NoDeploy) { return }
 
-$target = Join-Path $WowPath "Interface\AddOns\Drachensounds"
-robocopy $addon $target /MIR /NJH /NJS /NDL /NP | Out-Null
-if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
-Write-Host "deployed to $target"
+foreach ($client in $Clients) {
+    $clientDir = Join-Path $WowRoot $client
+    if (-not (Test-Path (Join-Path $clientDir "Interface"))) { Write-Host "skipped $client (not installed)"; continue }
+    $target = Join-Path $clientDir "Interface\AddOns\Drachensounds"
+    robocopy $addon $target /MIR /NJH /NJS /NDL /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy to $client failed ($LASTEXITCODE)" }
+    Write-Host "deployed to $target"
+}
 if ($Add.Count -gt 0) { Write-Host "New sound files need a full game restart (not just /reload) to be found." }

@@ -1,7 +1,7 @@
 -- Event detection. Midnight (12.x) hides most combat data behind "secret values",
 -- so every detector here uses an API that is documented as non-secret, or guards
 -- with issecretvalue(), or (Bloodlust) lets Blizzard play the sound itself.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 
 local issecretvalue = issecretvalue or function() return false end
 
@@ -35,12 +35,17 @@ local function IsMe(unit)
 	return me and not issecretvalue(me)
 end
 
+-- Spec role where specializations exist (Midnight); the assigned group role otherwise
+-- (Forever is Classic-based and may report no specialization).
 local function PlayerIsTank()
 	local getSpec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
 	local index = getSpec and getSpec()
-	if not index then return false end
-	local role = select(5, C_SpecializationInfo.GetSpecializationInfo(index))
-	return role == "TANK"
+	if index and index > 0 then
+		local role = select(5, C_SpecializationInfo.GetSpecializationInfo(index))
+		if role then return role == "TANK" end
+	end
+	local assigned = UnitGroupRolesAssigned("player")
+	return not issecretvalue(assigned) and assigned == "TANK"
 end
 
 ---------------------------------------------------------------------------
@@ -514,7 +519,8 @@ end
 local function JaNein(v) return v and "ja" or "nein" end
 
 function ns:PrintStatus()
-	self:Print("Aktiviert: %s, Kanal: %s", JaNein(self.db.enabled), ns.CHANNEL_LABELS[self.db.channel] or self.db.channel)
+	self:Print("Version %s (%s), aktiviert: %s, Kanal: %s", C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?",
+		ns.IS_FOREVER and "Forever" or "Midnight", JaNein(self.db.enabled), ns.CHANNEL_LABELS[self.db.channel] or self.db.channel)
 	self:Print("Kampfrausch-Sounds registriert: %d%s", #auraHandles,
 		auraRefreshPending and " (ausstehend, gerade eingeschränkt)" or "")
 	self:Print("Überwachte Abklingzeiten: %d, Zauber beim Wirken: %d per ID / %d per Name",

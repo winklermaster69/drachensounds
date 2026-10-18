@@ -1,6 +1,8 @@
 local ADDON_NAME, ns = ...
 
 ns.SOUND_DIR = "Interface\\AddOns\\" .. ADDON_NAME .. "\\sounds\\"
+-- WoW Forever (Classic content on the Midnight engine) shares this code; see CLAUDE.md.
+ns.IS_FOREVER = WOW_PROJECT_ID == (WOW_PROJECT_CAMELOT or 18)
 ns.CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
 ns.CHANNEL_LABELS = {
 	Master = "Meisterkanal",

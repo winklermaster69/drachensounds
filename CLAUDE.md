@@ -1,6 +1,13 @@
 # Drachensounds — agent notes
 
-WoW retail addon (Midnight, client 12.1.5 / `## Interface: 120105`) that plays custom mp3s on game events. Config UI via `/dsounds`.
+WoW addon that plays custom mp3s on game events, for Midnight retail (12.1.5, Interface 120105) and WoW Forever (1.60.1, Interface 16001) from one codebase. Config UI via `/dsounds`.
+
+## Clients (Midnight + Forever)
+
+- Forever ("Camelot" internally, `WOW_PROJECT_ID == WOW_PROJECT_CAMELOT` = 18 → `ns.IS_FOREVER`) is Classic content on the Midnight engine. One TOC lists both interfaces (`## Interface: 120105, 16001`); no per-flavor TOC or code fork.
+- Verified against wow-ui-source branch `forever` (1.60.1.70450): every documented API and event the addon uses, their secret-value flags and the secret predicates are identical to `live`. The UI templates resolve to the same Mainline variants (Forever adds a Camelot overlay). Re-run that diff when adding APIs: compare `Blizzard_APIDocumentationGenerated` entries between the `live` and `forever` branches.
+- Content differences are handled at runtime, not by flavor checks: tank detection falls back from spec role to `UnitGroupRolesAssigned` (Forever may have no specializations). Bloodlust IDs that don't exist on a client simply never fire.
+- Clients: `_retail_` (Midnight), `_classic_beta_` (Forever beta), `_forever_` (Forever live) under `C:\Program Files (x86)\World of Warcraft`. `deploy.ps1` mirrors into every installed one (`-Clients` to pick). Smoke test both flavors: `DS_FLAVOR=forever` simulates Forever.
 
 ## Layout
 
@@ -12,8 +19,8 @@ WoW retail addon (Midnight, client 12.1.5 / `## Interface: 120105`) that plays c
   - `sounds/*.mp3` — the bundled subset of the library, renamed after their event (origins below).
 - `sound-library/` — the full sound collection (~800 mp3s), local only (git-ignored, never published). Only a picked subset is copied into the addon; never bundle the whole library.
 - `sound-sources/` — full-length originals of sounds fetched from elsewhere (YouTube via yt-dlp), kept so clips can be re-cut by hand. Local only (git-ignored), never bundled.
-- `tools/deploy.ps1` — add/remove bundled sounds (`-Add quelle=ziel` copies `sound-library/quelle.mp3` as `ziel.mp3`; `-Remove`), regenerate `Sounds.lua`, mirror the addon to `C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\Drachensounds`.
-- `tests/smoke.lua` — offline test against a mocked WoW API: `"/c/Program Files (x86)/Lua/5.1/lua.exe" tests/smoke.lua` (run from repo root). Syntax check: `luac -p Drachensounds/*.lua` (same folder). Update the scenarios when trigger behaviour changes.
+- `tools/deploy.ps1` — add/remove bundled sounds (`-Add quelle=ziel` copies `sound-library/quelle.mp3` as `ziel.mp3`; `-Remove`), regenerate `Sounds.lua`, mirror the addon into `Interface\AddOns\Drachensounds` of every installed client (see Clients).
+- `tests/smoke.lua` — offline test against a mocked WoW API: `"/c/Program Files (x86)/Lua/5.1/lua.exe" tests/smoke.lua` (run from repo root; once more with `DS_FLAVOR=forever`). Syntax check: `luac -p Drachensounds/*.lua` (same folder). Update the scenarios when trigger behaviour changes.
 
 ## Workflow
 
