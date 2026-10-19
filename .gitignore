@@ -1,3 +1,6 @@
 # Local-only sound material (copyrighted originals), never published
 sound-library/
 sound-sources/
+
+# Built release zips (tools/release.ps1)
+release/
