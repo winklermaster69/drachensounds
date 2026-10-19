@@ -21,7 +21,7 @@ WoW addon that plays custom mp3s on game events, for Midnight retail (12.1.5, In
 - `sound-library/` — the full sound collection (~800 mp3s), local only (git-ignored, never published). Only a picked subset is copied into the addon; never bundle the whole library.
 - `sound-sources/` — full-length originals of sounds fetched from elsewhere (YouTube via yt-dlp), kept so clips can be re-cut by hand. Local only (git-ignored), never bundled.
 - `tools/deploy.ps1` — add/remove bundled sounds (`-Add quelle=ziel` copies `sound-library/quelle.mp3` as `ziel.mp3`; `-Remove`), regenerate `Sounds.lua`, mirror the addon into `Interface\AddOns\Drachensounds` of every installed client (see Clients).
-- `tools/release.ps1` — builds `release/Drachensounds-<version>.zip` (version from the TOC; regenerates `Sounds.lua`, runs the smoke test for both clients first; `-Force` overwrites). The zip has the `Drachensounds/` folder at its root with `/` entry names. `release/` is git-ignored.
+- `tools/release.ps1` — builds `release/Drachensounds-<version>.zip` (version from the TOC; regenerates `Sounds.lua`, runs the smoke test for both clients first; always replaces an existing zip of the same version). The zip has the `Drachensounds/` folder at its root with `/` entry names. `release/` is git-ignored.
 - `tests/smoke.lua` — offline test against a mocked WoW API: `"/c/Program Files (x86)/Lua/5.1/lua.exe" tests/smoke.lua` (run from repo root; once more with `DS_FLAVOR=forever`). Syntax check: `luac -p Drachensounds/*.lua` (same folder). Update the scenarios when trigger behaviour changes.
 
 ## Workflow

@@ -7,13 +7,12 @@
   regenerates Sounds.lua and runs the smoke test for both clients; any failure
   aborts. The zip contains the Drachensounds folder at its root (what CurseForge
   and manual installs into Interface\AddOns expect) and uses "/" in entry names.
+  An existing zip of the same version is always replaced.
 
 .EXAMPLE
-  .\tools\release.ps1           # build the zip for the current version
-  .\tools\release.ps1 -Force    # overwrite an existing zip of the same version
+  .\tools\release.ps1           # build (or rebuild) the zip for the current version
 #>
 param(
-    [switch]$Force,
     [string]$Lua = "C:\Program Files (x86)\Lua\5.1\lua.exe"
 )
 $ErrorActionPreference = "Stop"
@@ -27,7 +26,6 @@ if (-not $version) { throw "No '## Version:' line in $toc" }
 
 $outDir = Join-Path $repo "release"
 $zip = Join-Path $outDir "Drachensounds-$version.zip"
-if ((Test-Path $zip) -and -not $Force) { throw "$zip already exists (bump the version or pass -Force)" }
 
 # Keep the sound manifest in sync with sounds/ (no deploy).
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "deploy.ps1") -NoDeploy
