@@ -486,5 +486,39 @@ SlashCmdList.DRACHENSOUNDS("on")
 Check("english alias on", db.enabled == true)
 SlashCmdList.DRACHENSOUNDS("quatsch")
 
+-- Bundled mp3s must be tag-free and constant bitrate: without an info header the
+-- game estimates a sound's length from the first frame's bitrate, so variable-
+-- bitrate files get cut off (see CLAUDE.md, Sound model).
+local KBPS = { [0] = 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 }
+local function Mp3Problem(path)
+	local f = io.open(path, "rb")
+	if not f then return "missing" end
+	local d = f:read("*a")
+	f:close()
+	if d:sub(1, 3) == "ID3" or d:sub(-128, -126) == "TAG" then return "has tags" end
+	local i, rates, frames = 1, {}, 0
+	while i + 3 <= #d do
+		local b1, b2, b3 = d:byte(i, i + 2)
+		local brIndex = math.floor(b3 / 16)
+		if b1 == 255 and b2 >= 224 and brIndex > 0 and brIndex < 15 then
+			local kbps = KBPS[brIndex]
+			if d:sub(i + 36, i + 39) == "Xing" or d:sub(i + 36, i + 39) == "Info" then return "has an info header" end
+			rates[kbps] = true
+			frames = frames + 1
+			i = i + math.floor(144000 * kbps / 44100) + math.floor(b3 / 2) % 2
+		else
+			i = i + 1
+		end
+	end
+	local n = 0
+	for _ in pairs(rates) do n = n + 1 end
+	if frames == 0 then return "no mp3 frames" end
+	if n > 1 then return "variable bitrate" end
+end
+for _, name in ipairs(ns.SOUNDS) do
+	local problem = Mp3Problem(ADDON .. "/sounds/" .. name .. ".mp3")
+	Check("sound file " .. name .. (problem and (": " .. problem) or " is tag-free CBR"), not problem)
+end
+
 io.write(("\n%d checks, %d failures\n"):format(checks, failures))
 os.exit(failures == 0 and 0 or 1)
