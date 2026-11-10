@@ -325,8 +325,24 @@ local function BuildPanel()
 		"(höchstens 5 Sekunden lang). Änderungen daran greifen erst nach einem Bosskampf bzw. nach dem Kampf in Mythisch+.",
 		anchor)
 
+	-- Game sounds in instances ------------------------------------------------------
+	local gameHeader = Header(c, "Spielsounds in Dungeons und Schlachtzügen", lustNote, -22)
+	anchor = Note(c, "Schaltet die gewählten Spielsounds in Dungeons und Schlachtzügen aus, damit das Spiel " ..
+		"die Sounds dieses Addons seltener abschneidet. Beim Verlassen wird deine vorherige Einstellung wiederhergestellt.",
+		gameHeader)
+	for i, option in ipairs(ns.INSTANCE_SOUND_OPTIONS) do
+		if ns:InstanceSoundOptionAvailable(option) then
+			local row = CreateFrame("Frame", nil, c)
+			row:SetSize(CONTENT_WIDTH, ROW_HEIGHT)
+			row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, i == 1 and -6 or 0)
+			Checkbox(row, option.label, function() return ns.db.instanceSounds[option.key] end,
+				function(v) ns.db.instanceSounds[option.key] = v; Changed() end, option.tooltip):SetPoint("LEFT")
+			anchor = row
+		end
+	end
+
 	-- Spell list ------------------------------------------------------------------
-	local spellHeader = Header(c, "Zauberliste", lustNote, -22)
+	local spellHeader = Header(c, "Zauberliste", anchor, -22)
 	local spellNote = Note(c, "Zauber per Name oder ID eintragen. „Wenn bereit“ spielt den Sound von „Fähigkeit wieder " ..
 		"bereit“, „Beim Wirken“ einen eigenen Sound. Namen werden nur für erlernte Zauber erkannt.", spellHeader)
 	local input = EditBox(c, 240, function(text)

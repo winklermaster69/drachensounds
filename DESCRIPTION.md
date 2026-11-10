@@ -17,7 +17,7 @@
 - A mage in your group or raid casts a portal
 - Ready check started and/or everyone ready
 
-Each trigger can be turned on or off individually.
+Each trigger can be turned on or off individually. Optionally, armor and pet sounds can be muted in dungeons and raids so the addon's sounds get cut off less often; your settings are restored when you leave.
 
 ### Spell list
 
@@ -54,7 +54,7 @@ Add spells by name or ID. For each one, choose whether it plays the cooldown sou
 - Ein Magier in der Gruppe oder im Schlachtzug wirkt ein Portal
 - Bereitschaftscheck gestartet und/oder alle bereit
 
-Jeder Auslöser lässt sich einzeln ein- und ausschalten.
+Jeder Auslöser lässt sich einzeln ein- und ausschalten. Optional lassen sich Rüstungs- und Begleitergeräusche in Dungeons und Schlachtzügen stummschalten, damit die Sounds des Addons seltener abgeschnitten werden; beim Verlassen werden deine Einstellungen wiederhergestellt.
 
 ### Zauberliste
 

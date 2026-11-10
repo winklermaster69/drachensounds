@@ -97,6 +97,15 @@ _G.MAX_BOSS_FRAMES = 8
 _G.WOW_PROJECT_ID = FOREVER and 18 or 1
 _G.C_AddOns = { GetAddOnMetadata = function() return "test" end }
 _G.UnitGroupRolesAssigned = function() return groupRole end
+local cvars = {
+	Sound_EnableArmorFoleySoundForSelf = "1", Sound_EnableArmorFoleySoundForOthers = "1", Sound_EnablePetSounds = "1",
+}
+local instance = { false, "none" }
+_G.IsInInstance = function() return instance[1], instance[2] end
+_G.C_CVar = {
+	GetCVar = function(name) return cvars[name] end,
+	SetCVar = function(name, value) assert(cvars[name], "unknown CVar " .. name); cvars[name] = value; return true end,
+}
 _G.Settings = {
 	RegisterCanvasLayoutCategory = function() return {} end,
 	RegisterAddOnCategory = function() end,
@@ -469,6 +478,50 @@ StartReadyCheck()
 for _, u in ipairs({ "player", "party1", "party2", "party3" }) do Confirm(u, true) end
 Expect("start mode: only the start sound", { "bereitschaftscheck" })
 Fire("READY_CHECK_FINISHED", false)
+
+-- game sounds in dungeons and raids (opt-in, restored on leaving)
+local function Zone(inInstance, kind)
+	instance[1], instance[2] = inInstance, kind
+	Fire("ZONE_CHANGED_NEW_AREA")
+end
+local FOLEY_SELF, FOLEY_OTHERS, PETS = "Sound_EnableArmorFoleySoundForSelf", "Sound_EnableArmorFoleySoundForOthers", "Sound_EnablePetSounds"
+Check("instance sound options are off by default", db.instanceSounds.armorFoley == false and db.instanceSounds.pets == false)
+Zone(true, "raid")
+Check("off by default: raid changes nothing", cvars[FOLEY_OTHERS] == "1" and cvars[PETS] == "1")
+Zone(false, "none")
+db.instanceSounds.armorFoley = true
+ns:OnConfigChanged()
+Check("outside instances: nothing changed", cvars[FOLEY_SELF] == "1" and cvars[FOLEY_OTHERS] == "1")
+Zone(true, "raid")
+Check("raid: armor foley off, pets untouched", cvars[FOLEY_SELF] == "0" and cvars[FOLEY_OTHERS] == "0" and cvars[PETS] == "1")
+Check("original values kept in saved variables", db.cvarBackup[FOLEY_OTHERS] == "1" and db.cvarBackup[PETS] == nil)
+Zone(false, "none")
+Check("leaving restores armor foley", cvars[FOLEY_SELF] == "1" and cvars[FOLEY_OTHERS] == "1" and next(db.cvarBackup) == nil)
+db.instanceSounds.pets = true
+Zone(true, "party")
+Check("dungeon: pets off too", cvars[PETS] == "0" and cvars[FOLEY_OTHERS] == "0")
+cvars[PETS] = "1"  -- the user turns pet sounds back on inside
+Zone(false, "none")
+Check("a manual change inside is kept", cvars[PETS] == "1" and cvars[FOLEY_OTHERS] == "1" and next(db.cvarBackup) == nil)
+cvars[FOLEY_OTHERS] = "0"  -- user prefers it off everywhere
+Zone(true, "raid"); Zone(false, "none")
+Check("an original 0 stays 0", cvars[FOLEY_OTHERS] == "0")
+cvars[FOLEY_OTHERS] = "1"
+Zone(true, "raid")
+db.instanceSounds.armorFoley = false
+ns:OnConfigChanged()
+Check("unchecking inside restores at once", cvars[FOLEY_SELF] == "1" and cvars[FOLEY_OTHERS] == "1" and cvars[PETS] == "0")
+Zone(false, "none")
+Zone(true, "scenario")
+Check("scenarios/delves are left alone", cvars[PETS] == "1")
+Zone(false, "none")
+cvars[PETS] = nil  -- a client without this CVar
+Check("option hidden when a CVar is missing", not ns:InstanceSoundOptionAvailable(ns.INSTANCE_SOUND_OPTIONS[2]))
+Zone(true, "raid")
+Check("missing CVar is skipped without errors", cvars[PETS] == nil)
+Zone(false, "none")
+cvars[PETS] = "1"
+db.instanceSounds.pets = false
 
 -- options panel builds and lists render
 SlashCmdList.DRACHENSOUNDS("")

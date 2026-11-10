@@ -553,6 +553,7 @@ end)
 function ns:OnConfigChanged()
 	self:RebuildSpells()
 	self:RefreshAuraSounds()
+	self:UpdateInstanceSounds()
 end
 
 local function Count(tbl)

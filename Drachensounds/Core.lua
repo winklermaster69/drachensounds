@@ -83,6 +83,8 @@ local function BuildDefaults()
 		channel = "Master",
 		events = events,
 		spells = {},  -- { spell = "name or ID", trigger = "cast"|"ready", sound = "file" (cast only), enabled = true }
+		instanceSounds = { armorFoley = false, pets = false },  -- see GameSounds.lua
+		cvarBackup = {},  -- CVar values to restore after leaving an instance
 	}
 end
 
